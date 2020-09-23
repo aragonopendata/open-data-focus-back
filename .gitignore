@@ -1,0 +1,11 @@
+target/
+.idea/
+.settings/
+visual.iml
+.classpath
+.project
+\.vscode/launch\.json
+
+\.vscode/settings\.json
+
+\.factorypath
