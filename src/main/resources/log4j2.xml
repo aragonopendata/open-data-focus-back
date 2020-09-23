@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+
+	<Properties>
+		<Property name="log-path">/data/logs/visualdata</Property>
+		<Property name="file-name">visual-data-back</Property>
+	</Properties>
+
+	<Appenders>
+		<Console name="console-log" target="SYSTEM_OUT">
+			<PatternLayout pattern="[%p][%c{2}]: [%d{HH:mm:ss,SSS}][%t] - %m %n" />
+		</Console>
+		<!-- <RollingFile name="file-log" fileName="${log-path}\${file-name}.log"
+			filePattern="${log-path}/${file-name}-%d{yyyy-MM-dd}.log">
+			<PatternLayout pattern="[%p][%c{2}]: [%d{HH:mm:ss,SSS}][%t] - %m %n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy interval="1"
+					modulate="true" />
+			</Policies>
+		</RollingFile> -->
+	</Appenders>
+
+	<Loggers>
+		<Root level="info">
+			<!-- <appender-ref ref="file-log" /> -->
+			<appender-ref ref="console-log" />
+		</Root>
+	</Loggers>
+
+</Configuration>

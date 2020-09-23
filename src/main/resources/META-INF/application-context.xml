@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:jaxrs="http://cxf.apache.org/jaxrs"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="
+	http://www.springframework.org/schema/beans 
+	http://www.springframework.org/schema/beans/spring-beans.xsd 
+	http://www.springframework.org/schema/context 
+	http://www.springframework.org/schema/context/spring-context.xsd 
+	http://cxf.apache.org/jaxrs 
+	http://cxf.apache.org/schemas/jaxrs.xsd">
+	
+	<context:annotation-config/>
+	<context:property-placeholder/>
+
+	<import resource="classpath:META-INF/cxf/cxf.xml" />
+
+	<jaxrs:server id="services" address="/">
+		<jaxrs:serviceBeans>
+			<bean class="es.aragon.opendata.visual.rest.services.gaodc.impl.RestServiceEndpointImpl" />
+			<bean class="es.aragon.opendata.visual.rest.services.virtuoso.impl.RestServiceEndpointImpl" />
+			<bean class="es.aragon.opendata.visual.rest.services.ckan.impl.RestServiceEndpointImpl" />
+			<bean class="es.aragon.opendata.visual.rest.services.chart.impl.RestServiceEndpointImpl" />
+			<bean class="es.aragon.opendata.visual.rest.services.history.impl.RestServiceEndpointImpl" />
+			<bean class="es.aragon.opendata.visual.rest.services.url.impl.RestServiceEndpointImpl" />
+		</jaxrs:serviceBeans>
+		<jaxrs:providers>
+			<bean class="es.aragon.opendata.visual.rest.providers.GsonProvider" />
+			<bean class="es.aragon.opendata.visual.rest.providers.CorsFilter" />
+		</jaxrs:providers>
+	</jaxrs:server>
+
+</beans>
