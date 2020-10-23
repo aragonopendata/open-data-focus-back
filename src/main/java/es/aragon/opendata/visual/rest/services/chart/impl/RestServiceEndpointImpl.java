@@ -161,7 +161,7 @@ public class RestServiceEndpointImpl implements RestServiceEndpoint {
         log.info("--- Envio correo nueva grafica ---");
         MailModel mm = new MailModel();
         mm.setChartName(input.getTitle());
-        mm.setChartUrl(config.getString("visual.data.front.url") + "/charts/" + input.getId());
+        mm.setChartUrl(config.getString("visual.data.front.url") + "/charts/embed/" + input.getId());
         mm.setMailSubject("[VisualData] Nueva Gráfica");
         mm.setMailTemplate("mailNewChartTemplate.ftl");
         MailSender.sendMail(emailSender, freemarkerConfig, mm);
