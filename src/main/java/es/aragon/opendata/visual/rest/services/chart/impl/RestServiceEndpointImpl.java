@@ -118,6 +118,7 @@ public class RestServiceEndpointImpl implements RestServiceEndpoint {
 
     @Override
     public Response removeGraph(String idProcess) {
+        log.info("--- Peticion DELETE Remove Graph ---");
         ChartGenerateProcess p = chartGeneratorMongoRepository.findById(idProcess);
 
         try {
