@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:4.4
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  focus_back:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: visualdata_app
+    ports:
+      - "8081:8090"
+    environment:
+      - SPRING_DATA_MONGODB_HOST=
+      - SPRING_DATA_MONGODB_DATABASE=
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo-data:

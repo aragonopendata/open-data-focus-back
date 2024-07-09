@@ -9,3 +9,5 @@ visual.iml
 \.vscode/settings\.json
 
 \.factorypath
+docker-compose.yml
+src/main/resources/application.properties
