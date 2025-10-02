@@ -16,11 +16,12 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class Utils {
 
-	private final static Logger log = Logger.getLogger(Utils.class);
+	private final static Logger log = LogManager.getLogger(Utils.class);
 	private static final int defaultReadTimeOut = 10000;
 	private static final int defaultTimeOut = 5000;
 	
