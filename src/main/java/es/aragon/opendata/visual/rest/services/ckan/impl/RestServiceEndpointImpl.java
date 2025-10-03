@@ -41,42 +41,204 @@ public class RestServiceEndpointImpl implements RestServiceEndpoint {
     public Response packageList() {
         log.info("--- Peticion GET PackageList CKAN ---");
 
-        Client client = ClientBuilder.newClient();
-        WebTarget target = client.target(config.getString("ckan.api.url"));
+        try {
+            Client client = ClientBuilder.newClient();
+            String ckanApiUrl = config.getString("ckan.api.url");
+            log.info("CKAN API URL: {}", ckanApiUrl);
 
-        target = target.path("api/3/action/package_search").queryParam("q", "res_format:(CSV OR px OR PX)").queryParam("rows",
-                "0");
+            // Step 1: Get total count using modern API
+            WebTarget target = client.target(ckanApiUrl);
+            target = target.path("api/3/action/package_search")
+                    .queryParam("q", "res_format:(CSV OR px OR PX)")
+                    .queryParam("rows", "0");
 
-        Gson gson = new GsonBuilder().setLenient().create();
-        JsonObject jsonResponse = gson.fromJson(target.request().get(String.class), JsonObject.class);
-        int resultNumber = Integer.parseInt(jsonResponse.get("result").getAsJsonObject().get("count").getAsString());
+            String countUrl = target.getUri().toString();
+            log.info("Fetching package count from: {}", countUrl);
 
-        String response = "";
-        int cant = 1000;
-        for (int i = 0; i < resultNumber; i += 1000) {
-            if (i != 0) {
-                response += ",";
+            javax.ws.rs.core.Response countResponse = target.request().get();
+            int statusCode = countResponse.getStatus();
+            log.info("Count request status code: {}", statusCode);
+
+            if (statusCode != 200) {
+                log.error("Error fetching package count. Status: {}, Response: {}", statusCode, countResponse.readEntity(String.class));
+                return Response.status(statusCode).entity("{\"error\":\"Failed to fetch package count from CKAN\"}").build();
             }
-            if (i + 1000 > resultNumber)
-                cant = resultNumber - i;
 
-            target = client.target(config.getString("ckan.api.url"));
-            target = target.path("api/search/dataset").queryParam("q", "res_format:(CSV OR px OR PX)").queryParam("start", i)
-                    .queryParam("rows", cant).queryParam("fl", "name,title");
-            response += target.request().get(String.class);
+            String countResponseBody = countResponse.readEntity(String.class);
+            log.debug("Count response body: {}", countResponseBody);
+
+            Gson gson = new GsonBuilder().setLenient().create();
+            JsonObject jsonResponse = gson.fromJson(countResponseBody, JsonObject.class);
+            int resultNumber = Integer.parseInt(jsonResponse.get("result").getAsJsonObject().get("count").getAsString());
+            log.info("Total packages found: {}", resultNumber);
+
+            // Step 2: Fetch all packages in batches using modern API
+            // Match legacy API response format: array of objects with "results" property
+            StringBuilder responseBuilder = new StringBuilder();
+            int pageSize = 1000; // Modern API max is 1000
+            boolean firstPage = true;
+
+            for (int i = 0; i < resultNumber; i += pageSize) {
+                int currentPageSize = Math.min(pageSize, resultNumber - i);
+
+                // Use modern CKAN API v3 (package_search instead of deprecated api/search/dataset)
+                target = client.target(ckanApiUrl);
+                target = target.path("api/3/action/package_search")
+                        .queryParam("q", "res_format:(CSV OR px OR PX)")
+                        .queryParam("start", i)
+                        .queryParam("rows", currentPageSize);
+
+                String pageUrl = target.getUri().toString();
+                log.info("Fetching page {}-{} from: {}", i, i + currentPageSize - 1, pageUrl);
+
+                javax.ws.rs.core.Response pageResponse = target.request().get();
+                int pageStatusCode = pageResponse.getStatus();
+
+                if (pageStatusCode != 200) {
+                    log.error("Error fetching page {}-{}. Status: {}", i, i + currentPageSize - 1, pageStatusCode);
+                    return Response.status(pageStatusCode).entity("{\"error\":\"Failed to fetch package list page from CKAN\"}").build();
+                }
+
+                String pageBody = pageResponse.readEntity(String.class);
+                JsonObject pageJson = gson.fromJson(pageBody, JsonObject.class);
+
+                // Extract results array from modern API response structure
+                if (pageJson.has("result") && pageJson.get("result").getAsJsonObject().has("results")) {
+                    com.google.gson.JsonArray results = pageJson.get("result").getAsJsonObject().get("results").getAsJsonArray();
+                    com.google.gson.JsonArray filteredResults = new com.google.gson.JsonArray();
+
+                    // Filter to only name and title fields for backward compatibility
+                    for (int j = 0; j < results.size(); j++) {
+                        JsonObject dataset = results.get(j).getAsJsonObject();
+                        JsonObject filteredDataset = new JsonObject();
+
+                        if (dataset.has("name")) {
+                            filteredDataset.addProperty("name", dataset.get("name").getAsString());
+                        }
+                        if (dataset.has("title")) {
+                            filteredDataset.addProperty("title", dataset.get("title").getAsString());
+                        }
+
+                        filteredResults.add(filteredDataset);
+                    }
+
+                    // Build response in legacy API format: {"count": X, "results": [...]}
+                    if (!firstPage) {
+                        responseBuilder.append(",");
+                    }
+                    firstPage = false;
+
+                    JsonObject legacyFormatPage = new JsonObject();
+                    legacyFormatPage.addProperty("count", resultNumber);
+                    legacyFormatPage.add("results", filteredResults);
+                    responseBuilder.append(gson.toJson(legacyFormatPage));
+
+                    log.info("Successfully fetched page {}-{}, {} results", i, i + currentPageSize - 1, results.size());
+                }
+            }
+
+            String finalResponse = "[" + responseBuilder.toString() + "]";
+            log.info("PackageList completed successfully. Total response length: {}", finalResponse.length());
+            return Response.ok(finalResponse).build();
+
+        } catch (Exception e) {
+            log.error("Error in packageList", e);
+            return Response.status(500).entity("{\"error\":\"Internal server error: " + e.getMessage() + "\"}").build();
         }
-
-        // https://opendata.aragon.es/ckan/api/search/dataset?q=res_format:(CSV)&start=0&rows=1000&fl=name,title
-        return Response.ok("[" + response + "]").build();
     }
+
+    /*
+     * DEPRECATED IMPLEMENTATION (Legacy API)
+     * ------------------------------------------
+     * This is the old implementation using the deprecated CKAN legacy API endpoint.
+     * Kept for reference. The legacy API /api/search/dataset is no longer supported
+     * in newer CKAN versions.
+     *
+     * @Deprecated Use modern API implementation above
+     */
+    /*
+    @Override
+    public Response packageList_LEGACY() {
+        log.info("--- Peticion GET PackageList CKAN (LEGACY) ---");
+
+        try {
+            Client client = ClientBuilder.newClient();
+            String ckanApiUrl = config.getString("ckan.api.url");
+            log.info("CKAN API URL: {}", ckanApiUrl);
+
+            WebTarget target = client.target(ckanApiUrl);
+            target = target.path("api/3/action/package_search").queryParam("q", "res_format:(CSV OR px OR PX)").queryParam("rows", "0");
+
+            String countUrl = target.getUri().toString();
+            log.info("Fetching package count from: {}", countUrl);
+
+            javax.ws.rs.core.Response countResponse = target.request().get();
+            int statusCode = countResponse.getStatus();
+            log.info("Count request status code: {}", statusCode);
+
+            if (statusCode != 200) {
+                log.error("Error fetching package count. Status: {}, Response: {}", statusCode, countResponse.readEntity(String.class));
+                return Response.status(statusCode).entity("{\"error\":\"Failed to fetch package count from CKAN\"}").build();
+            }
+
+            String countResponseBody = countResponse.readEntity(String.class);
+            log.debug("Count response body: {}", countResponseBody);
+
+            Gson gson = new GsonBuilder().setLenient().create();
+            JsonObject jsonResponse = gson.fromJson(countResponseBody, JsonObject.class);
+            int resultNumber = Integer.parseInt(jsonResponse.get("result").getAsJsonObject().get("count").getAsString());
+            log.info("Total packages found: {}", resultNumber);
+
+            String response = "";
+            int cant = 1000;
+            for (int i = 0; i < resultNumber; i += 1000) {
+                if (i != 0) {
+                    response += ",";
+                }
+                if (i + 1000 > resultNumber)
+                    cant = resultNumber - i;
+
+                target = client.target(ckanApiUrl);
+                // DEPRECATED: /api/search/dataset is legacy API, not supported in CKAN 2.5+
+                target = target.path("api/search/dataset").queryParam("q", "res_format:(CSV OR px OR PX)").queryParam("start", i)
+                        .queryParam("rows", cant).queryParam("fl", "name,title");
+
+                String pageUrl = target.getUri().toString();
+                log.info("Fetching page {}-{} from: {}", i, i + cant - 1, pageUrl);
+
+                javax.ws.rs.core.Response pageResponse = target.request().get();
+                int pageStatusCode = pageResponse.getStatus();
+
+                if (pageStatusCode != 200) {
+                    log.error("Error fetching page {}-{}. Status: {}", i, i + cant - 1, pageStatusCode);
+                    return Response.status(pageStatusCode).entity("{\"error\":\"Failed to fetch package list page from CKAN\"}").build();
+                }
+
+                String pageBody = pageResponse.readEntity(String.class);
+                response += pageBody;
+                log.info("Successfully fetched page {}-{}, response length: {}", i, i + cant - 1, pageBody.length());
+            }
+
+            log.info("PackageList completed successfully. Total response length: {}", response.length());
+            return Response.ok("[" + response + "]").build();
+
+        } catch (Exception e) {
+            log.error("Error in packageList", e);
+            return Response.status(500).entity("{\"error\":\"Internal server error: " + e.getMessage() + "\"}").build();
+        }
+    }
+    */
 
     @Override
     public Response packageResource(JsonObject input) {
-    	
+
        log.info("--- Peticion POST packageResource --" + input.get("format")  + " ---");
+       log.info("Input data - URL: {}, Format: {}",
+               input.has("url") ? input.get("url").getAsString() : "null",
+               input.has("format") ? input.get("format").getAsString() : "null");
 
        CkanResourceDetailList jsonArrayResponse = new CkanResourceDetailList();
-       
+
        try {
 	       if (input.get("url").getAsString().contains("saw.dll")) {
 	    	   
@@ -128,9 +290,16 @@ public class RestServiceEndpointImpl implements RestServiceEndpoint {
 	       }
 	       
        } catch (Exception e) {
-           log.error("Error", e);
+           log.error("Error processing packageResource - URL: {}, Format: {}",
+                   input.has("url") ? input.get("url").getAsString() : "null",
+                   input.has("format") ? input.get("format").getAsString() : "null",
+                   e);
+           return Response.status(500)
+                   .entity("{\"error\": \"Failed to process resource: " + e.getMessage() + "\"}")
+                   .build();
        }
-       
+
+       log.info("PackageResource completed successfully. Response size: {}", jsonArrayResponse.size());
        return Response.ok(jsonArrayResponse).build();
     }
 
