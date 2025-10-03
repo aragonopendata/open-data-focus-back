@@ -299,7 +299,8 @@ public class RestServiceEndpointImpl implements RestServiceEndpoint {
                    .build();
        }
 
-       log.info("PackageResource completed successfully. Response size: {}", jsonArrayResponse.size());
+       log.info("PackageResource completed successfully. Result count: {}",
+               jsonArrayResponse.getResult() != null ? jsonArrayResponse.getResult().size() : 0);
        return Response.ok(jsonArrayResponse).build();
     }
 
